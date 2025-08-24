@@ -1,3 +1,4 @@
+api/create-payment-intent.js
 // /api/create-payment-intent.js
 import Stripe from "stripe";
 
