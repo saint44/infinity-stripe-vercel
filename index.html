@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Infinity Checkout Test</title>
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; padding: 24px; max-width: 720px; margin: auto; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin-top: 12px; }
+    button { padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer; }
+    input, .StripeElement { padding: 10px; border: 1px solid #ddd; border-radius: 8px; width: 100%; }
+    label { display: block; margin-top: 8px; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Infinity Labs — Test Checkout</h1>
+  <p>This simple page lets you create a PaymentIntent and confirm it with Stripe Elements.</p>
+
+  <div class="card">
+    <label>Amount (in cents)</label>
+    <input id="amount" type="number" value="1999"/>
+    <label>Currency</label>
+    <input id="currency" value="usd"/>
+    <label>Customer email (optional)</label>
+    <input id="email" type="email" placeholder="you@example.com"/>
+    <div id="card-element" class="card" style="margin-top: 12px;"></div>
+    <button id="pay">Pay</button>
+    <div id="status" style="margin-top: 12px;"></div>
+  </div>
+
+  <script>
+    async function getPublishableKey() {
+      const res = await fetch('/api/config');
+      if (!res.ok) throw new Error('Publishable key not set');
+      const data = await res.json();
+      return data.publishableKey;
+    }
+    (async () => {
+      const pk = await getPublishableKey();
+      const stripe = Stripe(pk);
+      const elements = stripe.elements();
+      const card = elements.create('card');
+      card.mount('#card-element');
+
+      document.getElementById('pay').addEventListener('click', async () => {
+        const amount = parseInt(document.getElementById('amount').value, 10);
+        const currency = document.getElementById('currency').value;
+        const email = document.getElementById('email').value || undefined;
+        const res = await fetch('/api/create-payment-intent', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ amount, currency, customer_email: email })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          document.getElementById('status').textContent = 'Error: ' + (data.error || res.statusText);
+          return;
+        }
+        const { error, paymentIntent } = await stripe.confirmCardPayment(data.clientSecret, {
+          payment_method: { card, billing_details: { email } }
+        });
+        if (error) {
+          document.getElementById('status').textContent = 'Payment error: ' + error.message;
+        } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+          document.getElementById('status').textContent = '✅ Payment succeeded: ' + paymentIntent.id;
+        } else {
+          document.getElementById('status').textContent = 'Payment status: ' + (paymentIntent && paymentIntent.status);
+        }
+      });
+    })().catch(err => {
+      document.getElementById('status').textContent = 'Config error: ' + err.message;
+    });
+  </script>
+</body>
+</html>
